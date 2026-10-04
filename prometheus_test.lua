@@ -1364,6 +1364,17 @@ function TestKeyIndex:testStaleReverseEntry()
   luaunit.assertEquals(self.dict:get("_prefix_rkey_key1"), 2)
 end
 
+function TestKeyIndex:testKeyCountBehindOccupiedSlots()
+  -- e.g. flush_all() while another worker was adding a key
+  self.dict:set("_prefix_key_count", 1)
+  self.dict:set("_prefix_key_1", "key1")
+  self.dict:set("_prefix_key_2", "key2")
+  self.key_index:add("key3", "eviction_err")
+  luaunit.assertEquals(self.key_index.index["key3"], 3)
+  luaunit.assertEquals(self.dict:get("_prefix_key_3"), "key3")
+  luaunit.assertEquals(self.dict:get("_prefix_key_count"), 3)
+end
+
 function TestKeyIndex:testSyncDeletes()
   self.last_deleted_key = nil
   self.key_index:add({"key1", "key2"}, "eviction_err")

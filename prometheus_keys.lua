@@ -115,11 +115,18 @@ end
 -- Allocates a new slot for key and publishes its reverse entry.
 function KeyIndex:insert(key, overwrite_rkey, err_msg_lru_eviction)
   local rkey = self.rkey_prefix .. key
+  local N = 0
   while true do
-    local N = (self.dict:get(self.key_count) or 0) + 1
+    -- step past occupied slots: after flush_all or eviction, key_count can lag
+    -- behind them, and re-reading it alone would retry the same slot forever
+    N = math.max(N + 1, (self.dict:get(self.key_count) or 0) + 1)
     local ok, err, forcible = self.dict:add(self.key_prefix .. N, key)
     if ok then
-      local _, _, forcible2 = self.dict:incr(self.key_count, 1, 0)
+      local count, _, forcible2 = self.dict:incr(self.key_count, 1, 0)
+      if count and count < N then
+        -- only ever raise key_count, so concurrent workers can't lower it
+        self.dict:incr(self.key_count, N - count, 0)
+      end
       local ok3, err3, forcible3
       if overwrite_rkey then
         ok3, err3, forcible3 = self.dict:set(rkey, N)
